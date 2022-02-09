@@ -1,7 +1,7 @@
 # The Krov Engine
 
 ## What is this?
-The Krov Engine is a GPU-accelerated raytracing engine made in C++ with love by Saalty, a friend of mine. His github account is @waternine9. All credit goes to him.
+The Krov Engine is a GPU-accelerated raytracing engine made in C++ with love by Saalty, a friend of mine. His github account is @waternine9\. All credit goes to him.
 
 ## What does it do?
 The Krov Engine can support:
