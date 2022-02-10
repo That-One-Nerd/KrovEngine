@@ -37,6 +37,10 @@ This scene will likely change, as it is just the current scene Saalty is working
 | `H` & `J` | Move the light source's Y position |
 | `K` & `L` | Move the light source's Z position |
 
+## Example Pictures
+
+![](example.png)
+
 ---
 
 This is Saalty's hobby, and along with AI, this is his favorite topic of computer science. I may pitch in occasionally, but most of this work is completely his. Hope you have fun with it!
