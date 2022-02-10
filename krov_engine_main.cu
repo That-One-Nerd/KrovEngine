@@ -21,6 +21,7 @@
 #include <curand_kernel.h>
 #include "cudamathOld.cuh"
 #include <thrust/device_vector.h>
+#include "OpenImageDenoise/oidn.hpp"
 #define RESOLUTION 512
 #define ALLOC_MEM_TRIS_NUM 800
 __host__ __device__ struct Triangle
@@ -77,7 +78,7 @@ __host__ __device__ bool rayTriangleIntersect(float3 v0, float3 v1, float3 v2, f
 	float3 vp2 = sub(P, v2);
 	C = cross(edge2, vp2);
 	if (dot(N, C) < 0) return false;
-	return true; 
+	return true;
 }
 __global__ void _draw_pix(int y, float camX, float camY, float camZ, float sunX, float sunY, float sunZ, float playerX, float playerY, float playerZ, float degreesXZ, float degreesYZ, curandState* rand_state, Triangle* tris, int depth, int* r, int* g, int* b)
 {
@@ -240,7 +241,7 @@ public:
 	int* g;
 	int* b;
 };
-bool loadFromObjectFile(std::string sFilename, std::vector<Triangle> &anyData)
+bool loadFromObjectFile(std::string sFilename, std::vector<Triangle>& anyData)
 {
 	std::ifstream f(sFilename);
 	if (!f.is_open())
@@ -291,7 +292,7 @@ bool loadFromObjectFile(std::string sFilename, std::vector<Triangle> &anyData)
 
 	return true;
 }
-Wrapper helper(int y, float camX, float camY, float camZ, float sunX, float sunY, float sunZ, float playerX, float playerY, float playerZ, float degreesXZ, float degreesYZ, Triangle* tris, curandState *state, int depth)
+Wrapper helper(int y, float camX, float camY, float camZ, float sunX, float sunY, float sunZ, float playerX, float playerY, float playerZ, float degreesXZ, float degreesYZ, Triangle* tris, curandState* state, int depth)
 {
 	Triangle* dev_tris = nullptr;
 	cudaMalloc(&dev_tris, sizeof(Triangle) * ALLOC_MEM_TRIS_NUM);
@@ -311,7 +312,7 @@ Wrapper helper(int y, float camX, float camY, float camZ, float sunX, float sunY
 	curandState* dev_state = nullptr;
 	cudaMalloc(&dev_state, sizeof(curandState));
 	cudaMemcpy(dev_state, state, sizeof(curandState), cudaMemcpyHostToDevice);
-	_draw_pix<<<RESOLUTION / 4, RESOLUTION>>>(y, camX, camY, camZ, sunX, sunY, sunZ, playerX, playerY, playerZ, degreesXZ, degreesYZ, dev_state, dev_tris, depth, dev_outputR, dev_outputG, dev_outputB);
+	_draw_pix << <RESOLUTION / 4, RESOLUTION >> > (y, camX, camY, camZ, sunX, sunY, sunZ, playerX, playerY, playerZ, degreesXZ, degreesYZ, dev_state, dev_tris, depth, dev_outputR, dev_outputG, dev_outputB);
 	cudaDeviceSynchronize();
 	cudaMemcpy(outputR, dev_outputR, RESOLUTION * (RESOLUTION / 4) * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(outputG, dev_outputG, RESOLUTION * (RESOLUTION / 4) * sizeof(int), cudaMemcpyDeviceToHost);
@@ -341,13 +342,13 @@ void main()
 	Mesh mesh;
 	mesh.triangles = std::vector<Triangle>(ALLOC_MEM_TRIS_NUM);
 	loadFromObjectFile("C:/Users/arthu/ObjFiles/helmet.obj", mesh.triangles);
-	cv::Mat canvas; 
-	
+	cv::Mat canvas;
+
 	glm::mat4 projection = glm::perspectiveFov(glm::half_pi<float>() / 2.0f, 2.0f, 2.0f, 0.01f, 100.0f);
-	
+
 	float frameCount = 0;
 	glm::mat4 identity = glm::identity<glm::mat4>();
-	
+
 	float playerPos[3] = { 0, 2.0f, 0 };
 	float playerVec[3] = { 0, 0, 0 };
 	float playerRotY = 0.0f;
@@ -355,6 +356,9 @@ void main()
 	float cameraDist = 4.0f;
 	float depth_UNDERCOVER = 1.0f;
 	int depth = 1.0f;
+	oidn::DeviceRef device = oidn::newDevice();
+	device.commit();
+	oidn::FilterRef filter = device.newFilter("RT"); // generic ray tracing filter
 	while (true)
 	{
 		frameCount++;
@@ -440,6 +444,17 @@ void main()
 		}
 		mesh.triangles = oldTris;
 		std::cout << (clock() - s) / CLOCKS_PER_SEC << std::endl;
+
+		
+		// Create a denoising filter
+		if (depth_UNDERCOVER > 4.0f)
+		{
+			canvas.convertTo(canvas, CV_32FC3);
+			filter.setImage("color", canvas.data, oidn::Format::Float3, RESOLUTION, RESOLUTION);
+			filter.setImage("output", canvas.data, oidn::Format::Float3, RESOLUTION, RESOLUTION);
+			filter.commit();
+			filter.execute();
+		}
 		cv::imshow("Output", canvas);
 		cv::setMouseCallback("Output", mouseCallback);
 		cv::waitKey(1);
