@@ -21,9 +21,8 @@
 #include <curand_kernel.h>
 #include "cudamathOld.cuh"
 #include <thrust/device_vector.h>
-#include "OpenImageDenoise/oidn.hpp"
 #define RESOLUTION 512
-#define ALLOC_MEM_TRIS_NUM 800
+#define ALLOC_MEM_TRIS_NUM 200
 __host__ __device__ struct Triangle
 {
 public:
@@ -341,7 +340,7 @@ void main()
 	srand(time(NULL));
 	Mesh mesh;
 	mesh.triangles = std::vector<Triangle>(ALLOC_MEM_TRIS_NUM);
-	loadFromObjectFile("C:/Users/arthu/ObjFiles/helmet.obj", mesh.triangles);
+	loadFromObjectFile("DIRECTORY TO YOUR OBJECT FILE", mesh.triangles);
 	cv::Mat canvas;
 
 	glm::mat4 projection = glm::perspectiveFov(glm::half_pi<float>() / 2.0f, 2.0f, 2.0f, 0.01f, 100.0f);
@@ -356,9 +355,6 @@ void main()
 	float cameraDist = 4.0f;
 	float depth_UNDERCOVER = 1.0f;
 	int depth = 1.0f;
-	oidn::DeviceRef device = oidn::newDevice();
-	device.commit();
-	oidn::FilterRef filter = device.newFilter("RT"); // generic ray tracing filter
 	while (true)
 	{
 		frameCount++;
@@ -445,16 +441,6 @@ void main()
 		mesh.triangles = oldTris;
 		std::cout << (clock() - s) / CLOCKS_PER_SEC << std::endl;
 
-		
-		// Create a denoising filter
-		if (depth_UNDERCOVER > 4.0f)
-		{
-			canvas.convertTo(canvas, CV_32FC3);
-			filter.setImage("color", canvas.data, oidn::Format::Float3, RESOLUTION, RESOLUTION);
-			filter.setImage("output", canvas.data, oidn::Format::Float3, RESOLUTION, RESOLUTION);
-			filter.commit();
-			filter.execute();
-		}
 		cv::imshow("Output", canvas);
 		cv::setMouseCallback("Output", mouseCallback);
 		cv::waitKey(1);
