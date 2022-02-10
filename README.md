@@ -40,6 +40,7 @@ This scene will likely change, as it is just the current scene Saalty is working
 ## Example Pictures
 
 ![](example.png)
+![](example2.png)
 
 ---
 
