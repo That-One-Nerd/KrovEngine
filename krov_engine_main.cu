@@ -22,7 +22,7 @@
 #include "cudamathOld.cuh"
 #include <thrust/device_vector.h>
 #define RESOLUTION 512
-#define ALLOC_MEM_TRIS_NUM 200
+#define ALLOC_MEM_TRIS_NUM 2000
 __host__ __device__ struct Triangle
 {
 public:
@@ -78,6 +78,77 @@ __host__ __device__ bool rayTriangleIntersect(float3 v0, float3 v1, float3 v2, f
 	C = cross(edge2, vp2);
 	if (dot(N, C) < 0) return false;
 	return true;
+}
+__device__ void calculate_ray(Triangle* tris, float& closestT, Triangle& closest, float3 rayVec, float3 rayPos, bool& playerHit, float playerX, float playerY, float playerZ)
+{
+	for (int i = 0;i < ALLOC_MEM_TRIS_NUM;i++)
+	{
+		float3 p1{ tris[i].points[0], tris[i].points[1], tris[i].points[2] };
+		float3 p2{ tris[i].points[3], tris[i].points[4], tris[i].points[5] };
+		float3 p3{ tris[i].points[6], tris[i].points[7], tris[i].points[8] };
+		float t;
+		if (rayTriangleIntersect(p1, p2, p3, t, rayPos, rayVec))
+		{
+			if (t < closestT)
+			{
+				closestT = t;
+				closest = tris[i];
+			}
+		}
+	}
+	float3 oc = sub(rayPos, { playerX, playerY, playerZ });
+	float a = dot(rayVec, rayVec);
+	float B = 2.0 * dot(oc, rayVec);
+	float c = dot(oc, oc) - 0.2f * 0.2f;
+	float discriminant = B * B - 4 * a * c;
+	if (discriminant >= 0.0) {
+		float numerator = -B - sqrtf(discriminant);
+		if (numerator > 0.0) {
+			float dist = numerator / (2.0 * a);
+			if (dist < closestT)
+			{
+				playerHit = true;
+				closestT = dist;
+				Triangle sphereTri;
+				sphereTri.normal = normalize(sub({ playerX, playerY, playerZ }, add(rayPos, mult(rayVec, { dist, dist, dist }))));
+				sphereTri.col = { 0.0f, 1.0f, 0.0f };
+				closest = sphereTri;
+			}
+		}
+	}
+}
+__device__ void calculate_ray_less_outputs(Triangle* tris, float& closestT, float3 rayVec, float3 rayPos, bool& playerHit, float playerX, float playerY, float playerZ)
+{
+	for (int i = 0;i < ALLOC_MEM_TRIS_NUM;i++)
+	{
+		float3 p1{ tris[i].points[0], tris[i].points[1], tris[i].points[2] };
+		float3 p2{ tris[i].points[3], tris[i].points[4], tris[i].points[5] };
+		float3 p3{ tris[i].points[6], tris[i].points[7], tris[i].points[8] };
+		float t;
+		if (rayTriangleIntersect(p1, p2, p3, t, rayPos, rayVec))
+		{
+			if (t < closestT)
+			{
+				closestT = t;
+			}
+		}
+	}
+	float3 oc = sub(rayPos, { playerX, playerY, playerZ });
+	float a = dot(rayVec, rayVec);
+	float B = 2.0 * dot(oc, rayVec);
+	float c = dot(oc, oc) - 0.2f * 0.2f;
+	float discriminant = B * B - 4 * a * c;
+	if (discriminant >= 0.0) {
+		float numerator = -B - sqrtf(discriminant);
+		if (numerator > 0.0) {
+			float dist = numerator / (2.0 * a);
+			if (dist < closestT)
+			{
+				playerHit = true;
+				closestT = dist;
+			}
+		}
+	}
 }
 __global__ void _draw_pix(int y, float camX, float camY, float camZ, float sunX, float sunY, float sunZ, float playerX, float playerY, float playerZ, float degreesXZ, float degreesYZ, curandState* rand_state, Triangle* tris, int depth, int* r, int* g, int* b)
 {
@@ -135,93 +206,71 @@ __global__ void _draw_pix(int y, float camX, float camY, float camZ, float sunX,
 	rayVec = normalize(rayVec);
 	Triangle closest;
 	float closeT = 1000.0f;
-	for (int i = 0;i < ALLOC_MEM_TRIS_NUM;i++)
-	{
-		float3 p1{ tris[i].points[0], tris[i].points[1], tris[i].points[2] };
-		float3 p2{ tris[i].points[3], tris[i].points[4], tris[i].points[5] };
-		float3 p3{ tris[i].points[6], tris[i].points[7], tris[i].points[8] };
-		float t;
-		if (rayTriangleIntersect(p1, p2, p3, t, rayPos, rayVec))
-		{
-			if (t < closeT)
-			{
-				closeT = t;
-				closest = tris[i];
-			}
-		}
-	}
 	bool playerHit = false;
-	float3 oc = sub(rayPos, { playerX, playerY, playerZ });
-	float a = dot(rayVec, rayVec);
-	float B = 2.0 * dot(oc, rayVec);
-	float c = dot(oc, oc) - 0.2f * 0.2f;
-	float discriminant = B * B - 4 * a * c;
-	if (discriminant >= 0.0) {
-		float numerator = -B - sqrtf(discriminant);
-		if (numerator > 0.0) {
-			float dist = numerator / (2.0 * a);
-			if (dist < closeT)
-			{
-				playerHit = true;
-				float3 intersect = add(rayPos, mult({ dist, dist, dist }, rayVec));
-				float3 normal = normalize(sub({ playerX, playerY, playerZ }, intersect));
-				float lums = max(dot(normal, normalize(sub(intersect, { sunX, sunY, sunZ }))), 0.0f) * 255;
-				fragColor = { (int)(lums * 0), (int)(lums * 1), (int)(lums * 0) };
-			}
-		}
-	}
-	if (closeT < 1000.0f && !playerHit)
+	calculate_ray(tris, closeT, closest, rayVec, rayPos, playerHit, playerX, playerY, playerZ);
+	if (closeT < 1000.0f)
 	{
 		float3 intersect = add(rayPos, mult({ closeT, closeT, closeT }, rayVec));
 		float totalR = 0, totalG = 0, totalB = 0;
 		for (int n = 0;n < depth;n++)
 		{
-			rayVec = normalize(sub(normalize(sub({ sunX, sunY, sunZ }, intersect)), { curand_uniform(rand_state + n + threadIdx.x) * 0.5f - 0.25f, curand_uniform(rand_state + n + 1 + blockIdx.x) * 0.5f - 0.25f, curand_uniform(rand_state + 2 + n + threadIdx.x + blockIdx.x) * 0.5f - 0.25f }));
+			float tempTotalR = 0, tempTotalG = 0, tempTotalB = 0;
+			curand_init(9384, threadIdx.x + blockIdx.x + n, 0, rand_state);
+			float3 reflectedRayVec = normalize(sub(reflect(rayVec, closest.normal), { curand_uniform(rand_state) * 0.05f - 0.025f, curand_uniform(rand_state) * 0.05f - 0.025f, curand_uniform(rand_state) * 0.05f - 0.025f }));
+			rayVec = normalize(sub(normalize(sub({ sunX, sunY, sunZ }, intersect)), { curand_uniform(rand_state) * 0.05f - 0.025f, curand_uniform(rand_state) * 0.05f - 0.025f, curand_uniform(rand_state) * 0.05f - 0.025f }));
 			rayPos = add(intersect, mult(rayVec, { 0.005f, 0.005f, 0.005f }));
 			closeT = 1000.0f;
-			Triangle closest2;
-			for (int i = 0;i < ALLOC_MEM_TRIS_NUM;i++)
-			{
-				float3 p1{ tris[i].points[0], tris[i].points[1], tris[i].points[2] };
-				float3 p2{ tris[i].points[3], tris[i].points[4], tris[i].points[5] };
-				float3 p3{ tris[i].points[6], tris[i].points[7], tris[i].points[8] };
-				float t;
-				if (rayTriangleIntersect(p1, p2, p3, t, rayPos, rayVec))
-				{
-					if (t < closeT)
-					{
-						closeT = t;
-						closest2 = tris[i];
-					}
-				}
-			}
-			float3 oc = sub(rayPos, { playerX, playerY, playerZ });
-			float a = dot(rayVec, rayVec);
-			float B = 2.0 * dot(oc, rayVec);
-			float c = dot(oc, oc) - 0.2f * 0.2f;
-			float discriminant = B * B - 4 * a * c;
-			if (discriminant >= 0.0) {
-				float numerator = -B - sqrtf(discriminant);
-				if (numerator > 0.0) {
-					float dist = numerator / (2.0 * a);
-					if (dist < closeT)
-					{
-						closeT = dist;
-					}
-				}
-			}
+			calculate_ray_less_outputs(tris, closeT, rayVec, rayPos, playerHit, playerX, playerY, playerZ);
 			float lums = 0;
 			if (closeT < 1000.0f)
 			{
-				lums = max(dot(closest.normal, normalize(sub(intersect, { sunX, sunY, sunZ }))), 0.0f) * 40;
+				lums = 0.0f;
 			}
 			else
 			{
 				lums = max(dot(closest.normal, normalize(sub(intersect, { sunX, sunY, sunZ }))), 0.0f) * 255;
 			}
-			totalR += (lums * closest.col.x);
-			totalG += (lums * closest.col.y);
-			totalB += (lums * closest.col.z);
+			tempTotalR += (lums * closest.col.x);
+			tempTotalG += (lums * closest.col.y);
+			tempTotalB += (lums * closest.col.z);
+			float3 col2{ 0.0f, 0.0f, 0.0f };
+			closeT = 1000.0f;
+			rayPos = add(intersect, mult(reflectedRayVec, { 0.005f, 0.005f, 0.005f }));
+			Triangle closest2;
+			calculate_ray(tris, closeT, closest2, reflectedRayVec, rayPos, playerHit, playerX, playerY, playerZ);
+			float lums2 = 0;
+			
+			if (closeT < 1000.0f)
+			{
+				col2 = closest2.col;
+				intersect = add(rayPos, mult({ closeT, closeT, closeT }, reflectedRayVec));
+				rayVec = normalize(sub({ sunX, sunY, sunZ }, intersect));
+				rayPos = add(intersect, mult(rayVec, { 0.005f, 0.005f, 0.005f }));
+				closeT = 1000.0f;
+				calculate_ray_less_outputs(tris, closeT, rayVec, rayPos, playerHit, playerX, playerY, playerZ);
+				if (closeT < 1000.0f)
+				{
+					lums2 = 0.0f;
+				}
+				else
+				{
+					lums2 = max(dot(closest2.normal, normalize(sub(intersect, { sunX, sunY, sunZ }))), 0.0f) * 255;
+				}
+			}
+			else
+			{
+				col2 = { 1.0f, 0.4f, 0.4f };
+				lums2 = 40.0f;
+			}
+			tempTotalR += (lums2 * col2.x);
+			tempTotalG += (lums2 * col2.y);
+			tempTotalB += (lums2 * col2.z);
+			tempTotalR *= 0.5f;
+			tempTotalG *= 0.5f;
+			tempTotalB *= 0.5f;
+			totalR += tempTotalR;
+			totalG += tempTotalG;
+			totalB += tempTotalB;
 		}
 		totalR /= depth;
 		totalG /= depth;
@@ -311,7 +360,7 @@ Wrapper helper(int y, float camX, float camY, float camZ, float sunX, float sunY
 	curandState* dev_state = nullptr;
 	cudaMalloc(&dev_state, sizeof(curandState));
 	cudaMemcpy(dev_state, state, sizeof(curandState), cudaMemcpyHostToDevice);
-	_draw_pix << <RESOLUTION / 4, RESOLUTION >> > (y, camX, camY, camZ, sunX, sunY, sunZ, playerX, playerY, playerZ, degreesXZ, degreesYZ, dev_state, dev_tris, depth, dev_outputR, dev_outputG, dev_outputB);
+	_draw_pix<<<RESOLUTION / 4, RESOLUTION>>>(y, camX, camY, camZ, sunX, sunY, sunZ, playerX, playerY, playerZ, degreesXZ, degreesYZ, dev_state, dev_tris, depth, dev_outputR, dev_outputG, dev_outputB);
 	cudaDeviceSynchronize();
 	cudaMemcpy(outputR, dev_outputR, RESOLUTION * (RESOLUTION / 4) * sizeof(int), cudaMemcpyDeviceToHost);
 	cudaMemcpy(outputG, dev_outputG, RESOLUTION * (RESOLUTION / 4) * sizeof(int), cudaMemcpyDeviceToHost);
@@ -340,7 +389,7 @@ void main()
 	srand(time(NULL));
 	Mesh mesh;
 	mesh.triangles = std::vector<Triangle>(ALLOC_MEM_TRIS_NUM);
-	loadFromObjectFile("DIRECTORY TO YOUR OBJECT FILE", mesh.triangles);
+	loadFromObjectFile("C:/Users/arthu/ObjFiles/helmet.obj", mesh.triangles);
 	cv::Mat canvas;
 
 	glm::mat4 projection = glm::perspectiveFov(glm::half_pi<float>() / 2.0f, 2.0f, 2.0f, 0.01f, 100.0f);
@@ -370,7 +419,6 @@ void main()
 		glm::vec4 lookVector = { 0, 0, 1, 0 };
 		lookVector = rotMatX * rotMatY * rotMatZ * lookVector;
 
-		// Camera physics
 
 		std::vector<Triangle> tris = mesh.triangles;
 		float closeT = cameraDist;
@@ -420,7 +468,7 @@ void main()
 		playerPos[0] += playerVec[0];
 		playerPos[1] += playerVec[1];
 		playerPos[2] += playerVec[2];
-		depth_UNDERCOVER += 0.5f;
+		// depth_UNDERCOVER += 0.5f;
 		depth = (int)depth_UNDERCOVER;
 		for (int y = 0;y < 4;y++)
 		{
