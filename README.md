@@ -11,10 +11,10 @@ The Krov Engine can support:
 - `.obj` file support
 - Simple physics
 - Dynamic cameras with collision detection
+- Up to 500k triangles at real-time
 
 ## What does it require?
-The Krov Engine requires 3 libraries pre-installed
-- GLM
+The Krov Engine requires 2 libraries pre-installed
 - OpenCV
 - CUDA
 
@@ -24,18 +24,10 @@ The Krov Engine requires 3 libraries pre-installed
 Simple (kind of)! Just create a C++ CUDA project, preferably using Visual Studio 2019, add the files and folders in this github repo to the project, and install the libraries mentioned above!
 
 ## The default scene
-This scene will likely change, as it is just the current scene Saalty is working on. Here are the controls for the current one:
-| Key(s) | Use |
-| - | - |
-| `W` | Move forward |
-| `S` | Move backward |
-| `A` | Turn left |
-| `D` | Turn right |
-| `Q` | Zoom into player |
-| `E` | Zoom out of player |
-| `F` & `G` | Move the light source's X position |
-| `H` & `J` | Move the light source's Y position |
-| `K` & `L` | Move the light source's Z position |
+There is no default scene anymore, as it is a header file which can be used to make your own raytraced games.
+
+## Documentation
+Coming soon!
 
 ## Example Pictures
 
